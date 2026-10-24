@@ -102,6 +102,8 @@ import static org.apache.doris.flink.table.DorisConfigOptions.SOURCE_BINLOG_INCR
 import static org.apache.doris.flink.table.DorisConfigOptions.SOURCE_BINLOG_OFFSET_TABLE;
 import static org.apache.doris.flink.table.DorisConfigOptions.SOURCE_BINLOG_POLL_INTERVAL;
 import static org.apache.doris.flink.table.DorisConfigOptions.SOURCE_BINLOG_VISIBLE_WAIT_TIMEOUT;
+import static org.apache.doris.flink.table.DorisConfigOptions.SOURCE_DATETIME_LEGACY_TIME_ZONE;
+import static org.apache.doris.flink.table.DorisConfigOptions.SOURCE_DATETIME_LEGACY_UNITS;
 import static org.apache.doris.flink.table.DorisConfigOptions.SOURCE_SCAN_MODE;
 import static org.apache.doris.flink.table.DorisConfigOptions.SOURCE_SCAN_TIMESTAMP;
 import static org.apache.doris.flink.table.DorisConfigOptions.SOURCE_USE_OLD_API;
@@ -198,6 +200,8 @@ public final class DorisDynamicTableFactory
         options.add(SINK_IGNORE_COMMIT_ERROR);
 
         options.add(USE_FLIGHT_SQL);
+        options.add(SOURCE_DATETIME_LEGACY_TIME_ZONE);
+        options.add(SOURCE_DATETIME_LEGACY_UNITS);
         options.add(FLIGHT_SQL_PORT);
         options.add(SINK_HTTP_UTF8_CHARSET);
         options.add(SINK_S3_ENDPOINT);
@@ -286,6 +290,9 @@ public final class DorisDynamicTableFactory
                         readableConfig.getOptional(SOURCE_BINLOG_OFFSET_TABLE).orElse(null))
                 .setBinlogConsumerId(
                         readableConfig.getOptional(SOURCE_BINLOG_CONSUMER_ID).orElse(null))
+                .setLegacyDateTimeZone(
+                        readableConfig.getOptional(SOURCE_DATETIME_LEGACY_TIME_ZONE).orElse(null))
+                .setLegacyDateTimeUnits(readableConfig.get(SOURCE_DATETIME_LEGACY_UNITS))
                 .setUseFlightSql(readableConfig.get(USE_FLIGHT_SQL))
                 .setFlightSqlPort(readableConfig.get(FLIGHT_SQL_PORT));
         return builder.build();

@@ -17,6 +17,10 @@
 
 package org.apache.doris.flink.cfg;
 
+import org.apache.flink.configuration.Configuration;
+
+import org.apache.doris.flink.table.DorisConfigOptions;
+
 import java.io.Serializable;
 import java.util.Properties;
 
@@ -144,6 +148,15 @@ public class DorisStreamOptions implements Serializable {
                                                 ConfigurationOptions.FLIGHT_SQL_PORT_DEFAULT
                                                         .toString())));
 
+        Configuration readConfig = new Configuration();
+        prop.stringPropertyNames().forEach(key -> readConfig.setString(key, prop.getProperty(key)));
+        readOptionsBuilder
+                .setLegacyDateTimeZone(
+                        readConfig
+                                .getOptional(DorisConfigOptions.SOURCE_DATETIME_LEGACY_TIME_ZONE)
+                                .orElse(null))
+                .setLegacyDateTimeUnits(
+                        readConfig.get(DorisConfigOptions.SOURCE_DATETIME_LEGACY_UNITS));
         this.options = optionsBuilder.build();
         this.readOptions = readOptionsBuilder.build();
     }

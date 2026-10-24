@@ -79,6 +79,8 @@ public class DorisDynamicTableFactoryTest {
     @Test
     public void testDorisSourceProperties() {
         Map<String, String> properties = getAllOptions();
+        properties.put("source.datetime.legacy-time-zone", "Asia/Shanghai");
+        properties.put("source.datetime.legacy-units", "created_at:SECOND,updated_at:MICROSECOND");
         properties.put("doris.request.query.timeout", "21600s");
         properties.put("doris.request.tablet.size", "1");
         properties.put("doris.batch.size", "4064");
@@ -125,7 +127,12 @@ public class DorisDynamicTableFactoryTest {
                         .build();
 
         final DorisReadOptions.Builder readOptionBuilder = DorisReadOptions.builder();
+        Map<String, String> legacyUnits = new java.util.HashMap<>();
+        legacyUnits.put("created_at", "SECOND");
+        legacyUnits.put("updated_at", "MICROSECOND");
         readOptionBuilder
+                .setLegacyDateTimeZone("Asia/Shanghai")
+                .setLegacyDateTimeUnits(legacyUnits)
                 .setDeserializeArrowAsync(DORIS_DESERIALIZE_ARROW_ASYNC_DEFAULT)
                 .setDeserializeQueueSize(DORIS_DESERIALIZE_QUEUE_SIZE_DEFAULT)
                 .setExecMemLimit(DORIS_EXEC_MEM_LIMIT_DEFAULT)

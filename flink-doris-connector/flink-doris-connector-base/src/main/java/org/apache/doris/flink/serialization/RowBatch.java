@@ -49,6 +49,7 @@ import org.apache.arrow.vector.ipc.ArrowStreamReader;
 import org.apache.arrow.vector.types.TimeUnit;
 import org.apache.arrow.vector.types.Types.MinorType;
 import org.apache.arrow.vector.types.pojo.ArrowType;
+import org.apache.doris.flink.cfg.DorisReadOptions;
 import org.apache.doris.flink.exception.DorisException;
 import org.apache.doris.flink.exception.DorisRuntimeException;
 import org.apache.doris.flink.rest.SchemaUtils;
@@ -132,12 +133,19 @@ public class RowBatch {
     private final DateTimeFormatter dateFormatter = DateTimeFormatter.ofPattern(DATE_PATTERN);
     private static final ZoneId DEFAULT_ZONE_ID = ZoneId.systemDefault();
 
+    private DorisReadOptions readOptions;
+
     public List<Row> getRowBatch() {
         return rowBatch;
     }
 
     public RowBatch(TScanBatchResult nextResult, Schema schema) {
         this(nextResult, schema, false);
+    }
+
+    public RowBatch(TScanBatchResult nextResult, Schema schema, DorisReadOptions readOptions) {
+        this(nextResult, schema, false);
+        this.readOptions = readOptions;
     }
 
     private RowBatch(TScanBatchResult nextResult, Schema schema, boolean incremental) {
@@ -153,6 +161,15 @@ public class RowBatch {
 
     public RowBatch(ArrowReader nextResult, Schema schema) {
         this(nextResult, schema, false);
+    }
+
+    public RowBatch(
+            ArrowReader nextResult,
+            Schema schema,
+            boolean incremental,
+            DorisReadOptions readOptions) {
+        this(nextResult, schema, incremental);
+        this.readOptions = readOptions;
     }
 
     public RowBatch(ArrowReader nextResult, Schema schema, boolean incremental) {
@@ -279,10 +296,12 @@ public class RowBatch {
                 MinorType minorType = fieldVector.getMinorType();
                 final String currentType = schema.get(businessColumn).getType();
                 final String colName = schema.get(businessColumn).getName();
+                TimeUnit legacyUnit = legacyDateTimeUnit(currentType, fieldVector);
                 for (int rowIndex = 0; rowIndex < rowCountInOneBatch; rowIndex++) {
                     boolean passed =
                             doConvert(
-                                    businessColumn, rowIndex, minorType, currentType, fieldVector);
+                                    businessColumn, rowIndex, minorType, currentType, fieldVector,
+                                    legacyUnit);
                     if (!passed) {
                         throw new IllegalArgumentException(
                                 "FLINK type is "
@@ -353,6 +372,43 @@ public class RowBatch {
     @VisibleForTesting
     public boolean doConvert(
             int col, int rowIndex, MinorType minorType, String currentType, FieldVector fieldVector)
+            throws DorisException {
+        return doConvert(
+                col,
+                rowIndex,
+                minorType,
+                currentType,
+                fieldVector,
+                legacyDateTimeUnit(currentType, fieldVector));
+    }
+
+    private TimeUnit legacyDateTimeUnit(String type, FieldVector vector) {
+        if (readOptions == null
+                || readOptions.getLegacyDateTimeZone() == null
+                || !("DATETIME".equals(type) || "DATETIMEV2".equals(type))
+                || !(vector instanceof TimeStampVector)) {
+            return null;
+        }
+        ArrowType.Timestamp timestamp = (ArrowType.Timestamp) vector.getField().getType();
+        if (timestamp.getTimezone() != null) {
+            throw new IllegalArgumentException(
+                    "Legacy datetime requires timezone-free Arrow timestamp: " + vector.getName());
+        }
+        TimeUnit unit = readOptions.getLegacyDateTimeUnits().get(vector.getName());
+        if (unit == null) {
+            throw new IllegalArgumentException(
+                    "Missing source.datetime.legacy-units entry for field: " + vector.getName());
+        }
+        return unit;
+    }
+
+    private boolean doConvert(
+            int col,
+            int rowIndex,
+            MinorType minorType,
+            String currentType,
+            FieldVector fieldVector,
+            TimeUnit legacyUnit)
             throws DorisException {
         switch (currentType) {
             case "NULL_TYPE":
@@ -523,7 +579,7 @@ public class RowBatch {
                             FastDateUtil.fastParseDateTime(stringValue, DATETIME_PATTERN);
                     addValueToRow(rowIndex, parse);
                 } else if (fieldVector instanceof TimeStampVector) {
-                    LocalDateTime dateTime = getDateTime(rowIndex, fieldVector);
+                    LocalDateTime dateTime = getDateTime(rowIndex, fieldVector, legacyUnit);
                     addValueToRow(rowIndex, dateTime);
                 } else {
                     logger.error(
@@ -548,7 +604,7 @@ public class RowBatch {
                             FastDateUtil.fastParseDateTimeV2(stringValue, DATETIMEV2_PATTERN);
                     addValueToRow(rowIndex, parse);
                 } else if (fieldVector instanceof TimeStampVector) {
-                    LocalDateTime dateTime = getDateTime(rowIndex, fieldVector);
+                    LocalDateTime dateTime = getDateTime(rowIndex, fieldVector, legacyUnit);
                     addValueToRow(rowIndex, dateTime);
                 } else {
                     logger.error(
@@ -696,6 +752,17 @@ public class RowBatch {
             return LocalDate.ofEpochDay(((Integer) reader.readObject()).longValue());
         }
         return reader.readObject();
+    }
+
+    private LocalDateTime getDateTime(int rowIndex, FieldVector fieldVector, TimeUnit legacyUnit) {
+        if (legacyUnit == null) {
+            return getDateTime(rowIndex, fieldVector);
+        }
+        TimeStampVector vector = (TimeStampVector) fieldVector;
+        return vector.isNull(rowIndex)
+                ? null
+                : longToLocalDateTime(
+                        vector.get(rowIndex), legacyUnit, readOptions.getLegacyDateTimeZone());
     }
 
     @VisibleForTesting

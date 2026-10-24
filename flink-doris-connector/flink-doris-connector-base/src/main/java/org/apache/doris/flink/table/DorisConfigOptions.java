@@ -30,6 +30,7 @@ import org.apache.doris.flink.cfg.S3TvfOptions;
 import org.apache.doris.flink.sink.writer.WriteMode;
 
 import java.time.Duration;
+import java.util.Collections;
 import java.util.Map;
 import java.util.Properties;
 
@@ -405,6 +406,19 @@ public class DorisConfigOptions {
                     .booleanType()
                     .defaultValue(false)
                     .withDescription("Whether to use buffer cache for breakpoint resume");
+    public static final ConfigOption<String> SOURCE_DATETIME_LEGACY_TIME_ZONE =
+            ConfigOptions.key("source.datetime.legacy-time-zone")
+                    .stringType()
+                    .noDefaultValue()
+                    .withDescription(
+                            "Explicit timezone for verified legacy epoch-local DATETIME encoding; absent keeps native behavior");
+    public static final ConfigOption<Map<String, String>> SOURCE_DATETIME_LEGACY_UNITS =
+            ConfigOptions.key("source.datetime.legacy-units")
+                    .mapType()
+                    .defaultValue(Collections.emptyMap())
+                    .withDescription(
+                            "Exact source field names and actual legacy units: SECOND, MILLISECOND, or MICROSECOND");
+
     public static final ConfigOption<Boolean> USE_FLIGHT_SQL =
             ConfigOptions.key("source.use-flight-sql")
                     .booleanType()

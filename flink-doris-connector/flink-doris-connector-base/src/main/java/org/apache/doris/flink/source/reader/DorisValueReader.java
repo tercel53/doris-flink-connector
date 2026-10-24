@@ -175,7 +175,7 @@ public class DorisValueReader extends ValueReader implements AutoCloseable {
                                     eos.set(nextResult.isEos());
                                     if (!eos.get()) {
                                         RowBatch rowBatch =
-                                                new RowBatch(nextResult, schema).readArrow();
+                                                new RowBatch(nextResult, schema, readOptions).readArrow();
                                         offset += rowBatch.getReadRowCount();
                                         rowBatch.close();
                                         try {
@@ -254,7 +254,7 @@ public class DorisValueReader extends ValueReader implements AutoCloseable {
                     TScanBatchResult nextResult = client.getNext(nextBatchParams);
                     eos.set(nextResult.isEos());
                     if (!eos.get()) {
-                        rowBatch = new RowBatch(nextResult, schema).readArrow();
+                        rowBatch = new RowBatch(nextResult, schema, readOptions).readArrow();
                     } else {
                         LOG.info(
                                 "Scan finished, tablets: {}, offset: {}",

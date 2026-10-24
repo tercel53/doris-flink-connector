@@ -352,7 +352,8 @@ public class DorisFlightValueReader extends ValueReader implements AutoCloseable
                                                         arrowReader
                                                                 .getVectorSchemaRoot()
                                                                 .getSchema()),
-                                                split instanceof DorisStreamSplit)
+                                                split instanceof DorisStreamSplit,
+                                                readOptions)
                                         .readFlightArrow();
                     }
                 }

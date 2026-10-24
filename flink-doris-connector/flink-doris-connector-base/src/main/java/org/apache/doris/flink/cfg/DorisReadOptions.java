@@ -17,16 +17,32 @@
 
 package org.apache.doris.flink.cfg;
 
+import org.apache.arrow.vector.types.TimeUnit;
 import org.apache.doris.flink.source.DorisBinlogIncrementType;
 import org.apache.doris.flink.source.DorisSourceScanMode;
 
 import java.io.Serializable;
+import java.time.ZoneId;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.Objects;
 
 /** Doris read Options. */
 public class DorisReadOptions implements Serializable {
 
     private static final long serialVersionUID = 1L;
+
+    private ZoneId legacyDateTimeZone;
+    private Map<String, TimeUnit> legacyDateTimeUnits = Collections.emptyMap();
+
+    public ZoneId getLegacyDateTimeZone() {
+        return legacyDateTimeZone;
+    }
+
+    public Map<String, TimeUnit> getLegacyDateTimeUnits() {
+        return legacyDateTimeUnits;
+    }
 
     private String readFields;
     private String filterQuery;
@@ -297,7 +313,9 @@ public class DorisReadOptions implements Serializable {
                 && Objects.equals(binlogPollIntervalMs, that.binlogPollIntervalMs)
                 && Objects.equals(binlogVisibleWaitTimeoutMs, that.binlogVisibleWaitTimeoutMs)
                 && Objects.equals(binlogOffsetTable, that.binlogOffsetTable)
-                && Objects.equals(binlogConsumerId, that.binlogConsumerId);
+                && Objects.equals(binlogConsumerId, that.binlogConsumerId)
+                && Objects.equals(legacyDateTimeZone, that.legacyDateTimeZone)
+                && Objects.equals(legacyDateTimeUnits, that.legacyDateTimeUnits);
     }
 
     @Override
@@ -325,11 +343,13 @@ public class DorisReadOptions implements Serializable {
                 binlogPollIntervalMs,
                 binlogVisibleWaitTimeoutMs,
                 binlogOffsetTable,
-                binlogConsumerId);
+                binlogConsumerId,
+                legacyDateTimeZone,
+                legacyDateTimeUnits);
     }
 
     public DorisReadOptions copy() {
-        return new DorisReadOptions(
+        DorisReadOptions copy = new DorisReadOptions(
                 readFields,
                 filterQuery,
                 requestTabletSize,
@@ -353,10 +373,27 @@ public class DorisReadOptions implements Serializable {
                 binlogVisibleWaitTimeoutMs,
                 binlogOffsetTable,
                 binlogConsumerId);
+        copy.legacyDateTimeZone = legacyDateTimeZone;
+        copy.legacyDateTimeUnits = legacyDateTimeUnits;
+        return copy;
     }
 
     /** Builder of {@link DorisReadOptions}. */
     public static class Builder {
+        private String legacyDateTimeZone;
+        private Map<String, String> legacyDateTimeUnits = Collections.emptyMap();
+
+        /** Opt in to the verified legacy epoch-local encoding; null preserves native behavior. */
+        public Builder setLegacyDateTimeZone(String zone) {
+            this.legacyDateTimeZone = zone;
+            return this;
+        }
+
+        /** Exact source field names mapped to SECOND, MILLISECOND, or MICROSECOND. */
+        public Builder setLegacyDateTimeUnits(Map<String, String> units) {
+            this.legacyDateTimeUnits = units;
+            return this;
+        }
 
         private String readFields;
         private String filterQuery;
@@ -599,7 +636,7 @@ public class DorisReadOptions implements Serializable {
          * @return a DorisReadOptions with the settings made for this builder.
          */
         public DorisReadOptions build() {
-            return new DorisReadOptions(
+            DorisReadOptions options = new DorisReadOptions(
                     readFields,
                     filterQuery,
                     requestTabletSize,
@@ -623,6 +660,30 @@ public class DorisReadOptions implements Serializable {
                     binlogVisibleWaitTimeoutMs,
                     binlogOffsetTable,
                     binlogConsumerId);
+            if (legacyDateTimeZone == null) {
+                if (!legacyDateTimeUnits.isEmpty()) {
+                    throw new IllegalArgumentException(
+                            "source.datetime.legacy-units requires source.datetime.legacy-time-zone");
+                }
+                return options;
+            }
+            options.legacyDateTimeZone = ZoneId.of(legacyDateTimeZone);
+            Map<String, TimeUnit> units = new HashMap<>();
+            legacyDateTimeUnits.forEach(
+                    (field, unit) -> {
+                        if (field.isEmpty()) {
+                            throw new IllegalArgumentException(
+                                    "Legacy datetime field name must not be empty");
+                        }
+                        TimeUnit parsed = TimeUnit.valueOf(unit);
+                        if (parsed == TimeUnit.NANOSECOND) {
+                            throw new IllegalArgumentException(
+                                    "Legacy Doris datetime supports SECOND, MILLISECOND, or MICROSECOND");
+                        }
+                        units.put(field, parsed);
+                    });
+            options.legacyDateTimeUnits = Collections.unmodifiableMap(units);
+            return options;
         }
     }
 }
